@@ -1,198 +1,142 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./MusicCover.sol";
 
-import "hardhat/console.sol";
-
-contract NFTMarketplace is ERC721URIStorage {
+contract Marketplace is ReentrancyGuard, MusicCover {
     using Counters for Counters.Counter;
-    Counters.Counter private _tokenIds;
-    Counters.Counter private _itemsSold;
-
-    uint256 listingPrice = 0.025 ether;
-    address payable owner;
-
-    mapping(uint256 => MusicItem) private idToMusicItem;
-
-    struct MusicItem {
-        uint256 tokenId;
+    // increments when a NFT is sold and decremented when a NFT is relisted.
+    // Counters.Counter private _nftsSold;
+    // tracks how many types of NFTs have been listed.
+    Counters.Counter private _nftCount;
+    // is taken from the seller and transferred to the marketplace contract owner whenever an NFT is sold.
+    uint256 public LISTING_FEE = 0.0001;
+    // stores the Marketplace contract owner, so that we know who to pay the listing fee to
+    address payable private _marketOwner;
+    // associates the unique tokenId to a the NFT struct.
+    mapping(string => NFT) public _idToNFT;
+    // associates an address to nfts listed by them
+    mapping(address => NFT[]) public authorStore;
+    //  stores relevant information for an NFT listed in the marketplace
+    struct NFT {
         address payable seller;
-        address payable owner;
         uint256 price;
-        bool sold;
+        bool listed;
+        uint256 quantity;
+        address[] owners;
+        string tokenId;
+        string songName;
+        string producer;
+        string genre;
+    }
+    // is emitted every time a NFT is Listed.
+    event NFTListed(address seller, uint256 quantity, uint256 price);
+    // is emitted every time a NFT is sold.
+    event NFTSold(address seller, address buyer, uint256 price);
+
+    constructor() {
+        _marketOwner = payable(msg.sender);
     }
 
-    event MusicItemCreated(
-        uint256 indexed tokenId,
-        address seller,
-        address owner,
-        uint256 price,
-        bool sold
-    );
-
-    modifier onlyOwner() {
-        require(
-            msg.sender == owner,
-            "only owner of the marketplace can change the listing price"
-        );
-        _;
-    }
-
-    constructor() ERC721("Altostream Tokens", "ALTO") {
-        owner = payable(msg.sender);
-    }
-
-    /* Updates the listing price of the contract */
-    function updateListingPrice(
-        uint256 _listingPrice
-    ) public payable onlyOwner {
-        require(
-            owner == msg.sender,
-            "Only marketplace owner can update listing price."
-        );
-        listingPrice = _listingPrice;
-    }
-
-    /* Returns the listing price of the contract */
-    function getListingPrice() public view returns (uint256) {
-        return listingPrice;
-    }
-
-    /* Mints a token and lists it in the marketplace */
-    function createToken(
-        string memory tokenURI,
-        uint256 price
-    ) public payable returns (uint256) {
-        _tokenIds.increment();
-        uint256 newTokenId = _tokenIds.current();
-
-        _mint(msg.sender, newTokenId);
-        _setTokenURI(newTokenId, tokenURI);
-        createMusicItem(newTokenId, price);
-        return newTokenId;
-    }
-
-    function createMusicItem(uint256 tokenId, uint256 price) private {
-        require(price > 0, "Price must be at least 1 alt");
-        require(
-            msg.value == listingPrice,
-            "Price must be equal to listing price"
-        );
-
-        idToMusicItem[tokenId] = MusicItem(
-            tokenId,
+    // List the NFT on the marketplace
+    function listNft(
+        string memory _tokenUri,
+        uint256 _price,
+        uint256 _quantity
+    ) public payable nonReentrant {
+        address[] memory _owners;
+        require(_price > 0, "Price must be at least 1 wei");
+        require(_quantity > 0, "Quantity must be greater than 0");
+        require(nftExists(_tokenUri) != true, "NFT already exists");
+        require(msg.value == LISTING_FEE, "Not enough ether for listing fee");
+        // increment nft type count
+        _nftCount.increment();
+        //mint one nft for the artist
+        MusicCover.mintNFT(_tokenUri);
+        // map nft to its id
+        _idToNFT[_tokenUri] = NFT(
             payable(msg.sender),
-            payable(address(this)),
-            price,
-            false
+            _price,
+            true,
+            _quantity,
+            _owners,
+            _tokenUri
         );
+        //add to artist's store
+        artistStore[msg.sender].push(
+            NFT(
+                payable(msg.sender),
+                _price,
+                true,
+                _quantity,
+                _owners,
+                _tokenUri
+            )
+        );
+        // send listing fee to market owner
+        payable(_marketOwner).transfer(msg.value);
 
-        _transfer(msg.sender, address(this), tokenId);
-        emit MusicItemCreated(tokenId, msg.sender, address(this), price, false);
+        emit NFTListed(msg.sender, _quantity, _price);
     }
 
-    /* allows someone to resell a token they have purchased */
-    function resellToken(uint256 tokenId, uint256 price) public payable {
+    // Buy an NFT
+    function buyNft(string memory _tokenUri) public payable nonReentrant {
+        NFT storage nft = _idToNFT[_tokenUri];
+        require(nftExists(_tokenUri) == true, "NFT does not exist");
         require(
-            idToMusicItem[tokenId].owner == msg.sender,
-            "Only item owner can perform this operation"
+            msg.value == nft.price,
+            "Not enough or too much ether to cover asking price"
         );
-        require(
-            msg.value == listingPrice,
-            "Price must be equal to listing price"
-        );
-        idToMusicItem[tokenId].sold = false;
-        idToMusicItem[tokenId].price = price;
-        idToMusicItem[tokenId].seller = payable(msg.sender);
-        idToMusicItem[tokenId].owner = payable(address(this));
-        _itemsSold.decrement();
-
-        _transfer(msg.sender, address(this), tokenId);
-    }
-
-    /* Creates the sale of a marketplace item */
-    /* Transfers ownership of the item, as well as funds between parties */
-    function createMarketSale(uint256 tokenId) public payable {
-        uint256 price = idToMusicItem[tokenId].price;
-        require(
-            msg.value == price,
-            "Please submit the asking price in order to complete the purchase"
-        );
-        idToMusicItem[tokenId].owner = payable(msg.sender);
-        idToMusicItem[tokenId].sold = true;
-        idToMusicItem[tokenId].seller = payable(address(0));
-        _itemsSold.increment();
-        _transfer(address(this), msg.sender, tokenId);
-        payable(owner).transfer(listingPrice);
-        payable(idToMusicItem[tokenId].seller).transfer(msg.value);
-    }
-
-    /* Returns all unsold market items */
-    function fetchMusicItems() public view returns (MusicItem[] memory) {
-        uint256 itemCount = _tokenIds.current();
-        uint256 unsoldItemCount = _tokenIds.current() - _itemsSold.current();
-        uint256 currentIndex = 0;
-
-        MusicItem[] memory items = new MusicItem[](unsoldItemCount);
-        for (uint256 i = 0; i < itemCount; i++) {
-            if (idToMusicItem[i + 1].owner == address(this)) {
-                uint256 currentId = i + 1;
-                MusicItem storage currentItem = idToMusicItem[currentId];
-                items[currentIndex] = currentItem;
-                currentIndex += 1;
+        require(nft.owners.length < nft.quantity, "NFTs maxed out");
+        //mint one nft for the buyer
+        MusicCover.mintNFT(_tokenUri);
+        // add to owners of nft
+        nft.owners.push(msg.sender);
+        _idToNFT[_tokenUri] = nft;
+        // update the author's store
+        NFT[] storage _store = authorStore[nft.seller];
+        for (uint256 i = 0; i < _store.length; ++i) {
+            if (
+                keccak256(abi.encodePacked(_store[i].tokenId)) ==
+                keccak256(abi.encodePacked(nft.tokenId))
+            ) {
+                _store[i].owners = nft.owners;
+                authorStore[nft.seller] = _store;
             }
         }
-        return items;
+        // send money to seller
+        address payable buyer = payable(msg.sender);
+        payable(nft.seller).transfer(msg.value);
+        // IERC721(_nftContract).transferFrom(address(this), buyer, nft.tokenId);
+        // _marketOwner.transfer(LISTING_FEE);
+        // nft.owner = buyer;
+        // nft.listed = false;
+
+        // _nftsSold.increment();
+        emit NFTSold(nft.seller, buyer, msg.value);
     }
 
-    // /* Returns only items that a user has purchased */
-    // function fetchMyNFTs() public view returns (MarketItem[] memory) {
-    //     uint256 totalItemCount = _tokenIds.current();
-    //     uint256 itemCount = 0;
-    //     uint256 currentIndex = 0;
-
-    //     for (uint256 i = 0; i < totalItemCount; i++) {
-    //         if (idToMarketItem[i + 1].owner == msg.sender) {
-    //             itemCount += 1;
-    //         }
-    //     }
-
-    //     MarketItem[] memory items = new MarketItem[](itemCount);
-    //     for (uint256 i = 0; i < totalItemCount; i++) {
-    //         if (idToMarketItem[i + 1].owner == msg.sender) {
-    //             uint256 currentId = i + 1;
-    //             MarketItem storage currentItem = idToMarketItem[currentId];
-    //             items[currentIndex] = currentItem;
-    //             currentIndex += 1;
-    //         }
-    //     }
-    //     return items;
-    // }
-
-    /* Returns only items a user has listed */
-    function fetchItemsListed() public view returns (MusicItem[] memory) {
-        uint256 totalItemCount = _tokenIds.current();
-        uint256 itemCount = 0;
-        uint256 currentIndex = 0;
-
-        for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMusicItem[i + 1].seller == msg.sender) {
-                itemCount += 1;
-            }
+    function nftExists(string memory _tokenUri) public view returns (bool) {
+        NFT memory sample = _idToNFT[_tokenUri];
+        if (sample.price == 0 || sample.quantity == 0) {
+            return false;
+        } else {
+            return true;
         }
+    }
 
-        MusicItem[] memory items = new MusicItem[](itemCount);
-        for (uint256 i = 0; i < totalItemCount; i++) {
-            if (idToMusicItem[i + 1].seller == msg.sender) {
-                uint256 currentId = i + 1;
-                MusicItem storage currentItem = idToMusicItem[currentId];
-                items[currentIndex] = currentItem;
-                currentIndex += 1;
-            }
-        }
-        return items;
+    function getNftOwners(
+        string memory _tokenUri
+    ) public view returns (address[] memory) {
+        require(nftExists(_tokenUri) == true, "NFT does not exist");
+        NFT memory sample = _idToNFT[_tokenUri];
+        return sample.owners;
+    }
+
+    function getListingFee() public view returns (uint256) {
+        return LISTING_FEE;
     }
 }

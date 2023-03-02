@@ -22,89 +22,89 @@ class App extends React.Component {
     return (
       <div>
         <div class="jumbotron d-flex align-items-center">
+          <form>
+            <div class="mb-3">
+              <label for="startprice" class="form-label">
+                Start Price
+              </label>
+              <input
+                value={this.state.newAuction.startPrice}
+                onChange={(e) =>
+                  this.setState({
+                    newAuction: {
+                      ...this.state.newAuction,
+                      startPrice: parseInt(e.target.value),
+                    },
+                  })
+                }
+                type="number"
+                class="form-control"
+                id="startprice"
+              />
+              <label for="startprice" class="form-label">
+                Token Id
+              </label>
+              <input
+                value={this.state.newAuction.tokenId}
+                onChange={(e) =>
+                  this.setState({
+                    newAuction: {
+                      ...this.state.newAuction,
+                      tokenId: parseInt(e.target.value),
+                    },
+                  })
+                }
+                type="number"
+                class="form-control"
+                id="startprice"
+              />
+              <label class="form-label">Minimum Increment</label>
+              <input
+                value={this.state.newAuction.minIncrement}
+                onChange={(e) =>
+                  this.setState({
+                    newAuction: {
+                      ...this.state.newAuction,
+                      minIncrement: parseInt(e.target.value),
+                    },
+                  })
+                }
+                type="number"
+                class="form-control"
+              />
+              <label class="form-label">Direct Buy Price</label>
+              <input
+                value={this.state.newAuction.directBuyPrice}
+                onChange={(e) =>
+                  this.setState({
+                    newAuction: {
+                      ...this.state.newAuction,
+                      directBuyPrice: parseInt(e.target.value),
+                    },
+                  })
+                }
+                type="number"
+                class="form-control"
+              />
+
+              <label class="form-label">Duration In Minutes</label>
+              <input
+                value={this.state.newAuction.endTime}
+                onChange={(e) =>
+                  this.setState({
+                    newAuction: {
+                      ...this.state.newAuction,
+                      endTime: parseInt(e.target.value),
+                    },
+                  })
+                }
+                type="number"
+                class="form-control"
+              />
+            </div>
+          </form>
           <div class="container">
             <div class="auctions row"></div>
-            <form>
-              <div class="mb-3">
-                <label for="startprice" class="form-label">
-                  Start Price
-                </label>
-                <input
-                  value={this.state.newAuction.startPrice}
-                  onChange={(e) =>
-                    this.setState({
-                      newAuction: {
-                        ...this.state.newAuction,
-                        startPrice: parseInt(e.target.value),
-                      },
-                    })
-                  }
-                  type="number"
-                  class="form-control"
-                  id="startprice"
-                />
-                <label for="startprice" class="form-label">
-                  Token Id
-                </label>
-                <input
-                  value={this.state.newAuction.tokenId}
-                  onChange={(e) =>
-                    this.setState({
-                      newAuction: {
-                        ...this.state.newAuction,
-                        tokenId: parseInt(e.target.value),
-                      },
-                    })
-                  }
-                  type="number"
-                  class="form-control"
-                  id="startprice"
-                />
-                <label class="form-label">Minimum Increment</label>
-                <input
-                  value={this.state.newAuction.minIncrement}
-                  onChange={(e) =>
-                    this.setState({
-                      newAuction: {
-                        ...this.state.newAuction,
-                        minIncrement: parseInt(e.target.value),
-                      },
-                    })
-                  }
-                  type="number"
-                  class="form-control"
-                />
-                <label class="form-label">Direct Buy Price</label>
-                <input
-                  value={this.state.newAuction.directBuyPrice}
-                  onChange={(e) =>
-                    this.setState({
-                      newAuction: {
-                        ...this.state.newAuction,
-                        directBuyPrice: parseInt(e.target.value),
-                      },
-                    })
-                  }
-                  type="number"
-                  class="form-control"
-                />
-
-                <label class="form-label">Duration In Minutes</label>
-                <input
-                  value={this.state.newAuction.endTime}
-                  onChange={(e) =>
-                    this.setState({
-                      newAuction: {
-                        ...this.state.newAuction,
-                        endTime: parseInt(e.target.value),
-                      },
-                    })
-                  }
-                  type="number"
-                  class="form-control"
-                />
-              </div>
-            </form>
           </div>
         </div>
 
